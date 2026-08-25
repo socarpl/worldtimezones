@@ -1,0 +1,1288 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live Time Zone Map</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #5f6f86;
+      --ocean: #8cc3ed;
+      --ocean-deep: #67a9dc;
+      --land: #9aa023;
+      --land-edge: #686f17;
+      --country-border: #4d5214;
+      --zone-line: #f01823;
+      --home: #137a43;
+      --day: #ffffff;
+      --night: #05070a;
+      --night-ink: #ffe46c;
+      --panel: #f7f3ea;
+      --panel-line: #d7d0bd;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+    }
+
+    body {
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.86), rgba(246,248,250,0.96)),
+        radial-gradient(circle at 10% 0%, rgba(120, 181, 217, 0.28), transparent 34%),
+        #eef2f5;
+      color: var(--ink);
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 18px 22px 14px;
+      border-bottom: 1px solid rgba(48, 67, 91, 0.15);
+      background: rgba(255, 255, 255, 0.76);
+      backdrop-filter: blur(12px);
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .local-readout {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 10px;
+      min-width: 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .local-readout strong {
+      color: var(--ink);
+      font-size: 14px;
+    }
+
+    .about-button {
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 24px;
+      height: 24px;
+      border: 2px solid #596274;
+      border-radius: 50%;
+      background: #f6f7f9;
+      color: #1e2a3f;
+      box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 #b8bdc8;
+      font: 800 15px/1 Arial, sans-serif;
+      cursor: pointer;
+    }
+
+    .about-button:active {
+      box-shadow: inset 1px 1px 0 #9da4b2, inset -1px -1px 0 #ffffff;
+      transform: translateY(1px);
+    }
+
+    .about-button:focus-visible {
+      outline: 2px solid #111928;
+      outline-offset: 2px;
+    }
+
+    .map-region {
+      display: grid;
+      position: relative;
+      min-height: 0;
+      padding: 18px;
+    }
+
+    .map-scroll {
+      width: 100%;
+      min-height: 0;
+      overflow: auto;
+      border: 1px solid rgba(48, 67, 91, 0.2);
+      background: var(--ocean);
+      box-shadow: 0 18px 50px rgba(32, 49, 72, 0.16);
+    }
+
+    .attribution {
+      margin: 8px 2px 0;
+      color: rgba(23, 32, 51, 0.68);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .map-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 10px 2px 0;
+      color: #233047;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .map-controls input {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      accent-color: #d81422;
+    }
+
+    .map-canvas {
+      display: block;
+      width: 100%;
+      min-width: 1180px;
+      height: auto;
+      aspect-ratio: 1440 / 760;
+      user-select: none;
+    }
+
+    .band-even {
+      fill: rgba(255, 255, 255, 0.06);
+    }
+
+    .band-odd {
+      fill: rgba(22, 75, 116, 0.06);
+    }
+
+    .map-grid {
+      stroke: rgba(255, 255, 255, 0.32);
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .zone-boundary {
+      fill: none;
+      stroke: var(--zone-line);
+      stroke-width: 1.15;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+      vector-effect: non-scaling-stroke;
+      pointer-events: none;
+    }
+
+    .timezone-ocean-boundary {
+      opacity: 0.88;
+    }
+
+    .land {
+      fill: var(--land);
+      stroke: var(--land-edge);
+      stroke-width: 0.6;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+      filter: drop-shadow(0 1px 0 rgba(255,255,255,0.2));
+      pointer-events: none;
+      fill-rule: evenodd;
+    }
+
+    .country-border {
+      fill: none;
+      stroke: var(--country-border);
+      stroke-width: 0.55;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+      vector-effect: non-scaling-stroke;
+      pointer-events: none;
+    }
+
+    .offset-label {
+      fill: rgba(23, 32, 51, 0.76);
+      font-size: 15px;
+      font-weight: 800;
+      text-anchor: middle;
+    }
+
+    .clock-card {
+      stroke: rgba(13, 22, 35, 0.76);
+      stroke-width: 1.5;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .clock-hit-area {
+      fill: transparent;
+      pointer-events: all;
+    }
+
+    .clock-time {
+      font-size: 15px;
+      font-weight: 850;
+      text-anchor: middle;
+      dominant-baseline: central;
+      letter-spacing: 0;
+    }
+
+    .clock-name {
+      fill: #111928;
+      font-size: 12px;
+      font-weight: 850;
+      text-anchor: middle;
+      letter-spacing: 0;
+      cursor: pointer;
+    }
+
+    .clock-zone {
+      fill: rgba(23, 32, 51, 0.78);
+      font-size: 10px;
+      font-weight: 750;
+      text-anchor: middle;
+      letter-spacing: 0;
+    }
+
+    .dst-badge rect {
+      fill: #f4d35e;
+      stroke: rgba(13, 22, 35, 0.82);
+      stroke-width: 1.1;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .dst-badge text {
+      fill: #10151f;
+      font-size: 9px;
+      font-weight: 900;
+      text-anchor: middle;
+      dominant-baseline: central;
+      pointer-events: none;
+    }
+
+    .home-icon {
+      fill: var(--home);
+      stroke: #ffffff;
+      stroke-width: 1.5;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .tooltip {
+      position: fixed;
+      left: 0;
+      top: 0;
+      z-index: 10;
+      max-width: 180px;
+      padding: 7px 9px;
+      border: 1px solid rgba(13, 22, 35, 0.8);
+      background: rgba(13, 19, 32, 0.95);
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 750;
+      pointer-events: none;
+      opacity: 0;
+      transform: translate(-50%, calc(-100% - 10px));
+      transition: opacity 120ms ease;
+      white-space: nowrap;
+    }
+
+    .tooltip.visible {
+      opacity: 1;
+    }
+
+    .about-overlay {
+      position: absolute;
+      inset: 18px;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: rgba(0, 0, 0, 0.18);
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    .win98-dialog {
+      width: min(420px, calc(100vw - 48px));
+      border: 2px solid;
+      border-color: #ffffff #404040 #404040 #ffffff;
+      background: #c0c0c0;
+      box-shadow: 2px 2px 0 #000000;
+      color: #000000;
+      font-family: Tahoma, "MS Sans Serif", Arial, sans-serif;
+      font-size: 12px;
+    }
+
+    .win98-titlebar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 22px;
+      padding: 2px 2px 2px 6px;
+      background: linear-gradient(90deg, #000080, #1084d0);
+      color: #ffffff;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .win98-close {
+      display: inline-grid;
+      place-items: center;
+      width: 18px;
+      height: 16px;
+      border: 1px solid;
+      border-color: #ffffff #404040 #404040 #ffffff;
+      background: #c0c0c0;
+      color: #000000;
+      font: 700 12px/1 Tahoma, Arial, sans-serif;
+      padding: 0;
+      cursor: pointer;
+    }
+
+    .win98-close:active,
+    .win98-ok:active {
+      border-color: #404040 #ffffff #ffffff #404040;
+      padding-top: 1px;
+      padding-left: 1px;
+    }
+
+    .win98-body {
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      gap: 12px;
+      padding: 18px 18px 12px;
+      border: 1px solid;
+      border-color: #808080 #ffffff #ffffff #808080;
+    }
+
+    .win98-info-icon {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border: 2px solid #7d8ba2;
+      border-radius: 50%;
+      background: #ffffff;
+      color: #0646bf;
+      font: 900 27px/1 Georgia, serif;
+      box-shadow: inset -2px -2px 0 #dfe4ef;
+    }
+
+    .win98-copy p {
+      margin: 0 0 8px;
+      line-height: 1.35;
+    }
+
+    .win98-copy p:last-child {
+      margin-bottom: 0;
+    }
+
+    .win98-copy a {
+      color: #0000ee;
+      text-decoration: underline;
+    }
+
+    .win98-actions {
+      display: flex;
+      justify-content: center;
+      padding: 10px 12px 14px;
+    }
+
+    .win98-ok {
+      min-width: 76px;
+      height: 24px;
+      border: 2px solid;
+      border-color: #ffffff #404040 #404040 #ffffff;
+      background: #c0c0c0;
+      color: #000000;
+      font: 12px/1 Tahoma, Arial, sans-serif;
+      cursor: pointer;
+    }
+
+    .win98-close:focus-visible,
+    .win98-ok:focus-visible {
+      outline: 1px dotted #000000;
+      outline-offset: -4px;
+    }
+
+    @media (max-width: 720px) {
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 14px;
+      }
+
+      .local-readout {
+        justify-content: flex-start;
+      }
+
+      .top-actions {
+        justify-content: flex-start;
+      }
+
+      .map-region {
+        padding: 10px;
+      }
+
+      .about-overlay {
+        inset: 10px;
+        align-items: start;
+        padding-top: 26px;
+      }
+
+      .map-canvas {
+        min-width: 1080px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <h1>Live Time Zone Map</h1>
+      <div class="top-actions">
+        <div class="local-readout" aria-live="polite">
+          <span>Local zone</span>
+          <strong id="localZoneName">Detecting...</strong>
+          <span id="localOffset">UTC</span>
+          <span id="localClock">--:--</span>
+        </div>
+        <button class="about-button" id="aboutButton" type="button" aria-haspopup="dialog" aria-controls="aboutOverlay" aria-label="About">?</button>
+      </div>
+    </header>
+
+    <section class="map-region" aria-label="Live world time zone map">
+      <div class="map-scroll" id="mapScroll">
+        <svg class="map-canvas" id="tzMap" viewBox="0 0 1440 760" role="img" aria-labelledby="mapTitle mapDesc">
+          <title id="mapTitle">Live world time zone map</title>
+          <desc id="mapDesc">A responsive vector world map using Natural Earth land and country-border polygons, with time-zone boundaries shown over ocean.</desc>
+          <defs id="mapDefs">
+            <linearGradient id="oceanGradient" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0" stop-color="#9fd0f1"></stop>
+              <stop offset="0.62" stop-color="#86beea"></stop>
+              <stop offset="1" stop-color="#6faee0"></stop>
+            </linearGradient>
+          </defs>
+
+          <rect width="1440" height="760" fill="url(#oceanGradient)"></rect>
+          <g id="bandLayer"></g>
+          <g id="gridLayer"></g>
+          <g id="landLayer" aria-hidden="true"></g>
+          <g id="countryBorderLayer" aria-hidden="true"></g>
+          <g id="timezoneLayer" aria-hidden="true" hidden></g>
+          <g id="labelLayer"></g>
+          <g id="clockLayer"></g>
+        </svg>
+      </div>
+      <label class="map-controls">
+        <input id="timezoneLinesToggle" type="checkbox" aria-controls="timezoneLayer">
+        <span>Geopolitical timezone lines</span>
+      </label>
+      <p class="attribution">Land and country-border data: Natural Earth. Time-zone boundaries: OpenStreetMap contributors via timezone-boundary-builder 2026c.</p>
+      <div class="about-overlay" id="aboutOverlay" hidden>
+        <section class="win98-dialog" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+          <div class="win98-titlebar">
+            <span id="aboutTitle">About</span>
+            <button class="win98-close" id="aboutClose" type="button" aria-label="Close">x</button>
+          </div>
+          <div class="win98-body">
+            <div class="win98-info-icon" aria-hidden="true">i</div>
+            <div class="win98-copy">
+              <p>&copy; <a href="https://www.socar.pl" target="_blank" rel="noopener noreferrer">SOCAR</a> 2026 <br> Developed using <a href="https://openai.com/codex/" target="_blank" rel="noopener noreferrer">OpenAI Codex</a></p>
+            </div>
+          </div>
+          <div class="win98-actions">
+            <button class="win98-ok" id="aboutOk" type="button">OK</button>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <div class="tooltip" id="tooltip" role="tooltip">Daylight Saving Time</div>
+
+  <script src="map-data.js"></script>
+  <script>
+    (() => {
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const MAP = {
+        x: 18,
+        y: 0,
+        width: 1404,
+        height: 760,
+        clockY: 618,
+        clockHeight: 42,
+        nameY: 683,
+        zoneY: 704,
+        dstY: 724
+      };
+      const OFFSETS = Array.from({ length: 27 }, (_, index) => -12 + index);
+      const SLOT_WIDTH = MAP.width / OFFSETS.length;
+      const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+      const zoneFormatterCache = new Map();
+      const tooltip = document.getElementById("tooltip");
+      const clockLayer = document.getElementById("clockLayer");
+      const localZoneName = document.getElementById("localZoneName");
+      const localOffset = document.getElementById("localOffset");
+      const localClock = document.getElementById("localClock");
+      const aboutButton = document.getElementById("aboutButton");
+      const aboutOverlay = document.getElementById("aboutOverlay");
+      const aboutClose = document.getElementById("aboutClose");
+      const aboutOk = document.getElementById("aboutOk");
+      const timezoneLinesToggle = document.getElementById("timezoneLinesToggle");
+      const timezoneLayer = document.getElementById("timezoneLayer");
+      let aboutReturnFocus = null;
+
+      const CLOCK_COLORS = [
+        { background: "#000000", name: "Black", text: "#F5F5F5" },
+        { background: "#101113", name: "Near black", text: "#F5F5F5" },
+        { background: "#24272B", name: "Charcoal", text: "#F5F5F5" },
+        { background: "#41464A", name: "Dark blue-grey", text: "#F5F5F5" },
+        { background: "#686B66", name: "Dawn grey", text: "#F5F5F5" },
+        { background: "#A7A28B", name: "Warm grey", text: "#171717" },
+        { background: "#FFF4C2", name: "Pale sunrise yellow", text: "#171717" },
+        { background: "#FFEEA3", name: "Vanilla yellow", text: "#171717" },
+        { background: "#FFE77A", name: "Soft sunlight", text: "#171717" },
+        { background: "#FFE052", name: "Morning yellow", text: "#171717" },
+        { background: "#FFDA2E", name: "Sun yellow", text: "#171717" },
+        { background: "#FFD814", name: "Bright golden yellow", text: "#171717" },
+        { background: "#FFD700", name: "Gold", text: "#171717" },
+        { background: "#FFD000", name: "Deep sunlight", text: "#171717" },
+        { background: "#FFC400", name: "Amber yellow", text: "#171717" },
+        { background: "#FFB800", name: "Golden amber", text: "#171717" },
+        { background: "#FFAA18", name: "Warm amber", text: "#171717" },
+        { background: "#FF982E", name: "Sunset gold", text: "#171717" },
+        { background: "#F58242", name: "Golden-hour orange", text: "#171717" },
+        { background: "#C57C4A", name: "Muted orange", text: "#171717" },
+        { background: "#936F4F", name: "Yellow-brown dusk", text: "#171717" },
+        { background: "#696057", name: "Warm dusk grey", text: "#F5F5F5" },
+        { background: "#43413F", name: "Dark warm grey", text: "#F5F5F5" },
+        { background: "#222222", name: "Near-black charcoal", text: "#F5F5F5" }
+      ];
+
+      const CANDIDATES = {
+        "-720": ["Etc/GMT+12"],
+        "-660": ["Pacific/Pago_Pago", "Pacific/Niue", "Etc/GMT+11"],
+        "-600": ["Pacific/Honolulu", "Pacific/Rarotonga", "Etc/GMT+10"],
+        "-540": ["America/Anchorage", "Pacific/Gambier", "Etc/GMT+9"],
+        "-480": ["America/Anchorage", "America/Los_Angeles", "Pacific/Pitcairn", "Etc/GMT+8"],
+        "-420": ["America/Los_Angeles", "America/Denver", "America/Phoenix", "Etc/GMT+7"],
+        "-360": ["America/Denver", "America/Chicago", "America/Regina", "Etc/GMT+6"],
+        "-300": ["America/Chicago", "America/New_York", "America/Bogota", "Etc/GMT+5"],
+        "-240": ["America/New_York", "America/Halifax", "America/Santo_Domingo", "Etc/GMT+4"],
+        "-180": ["America/Halifax", "America/Sao_Paulo", "America/Argentina/Buenos_Aires", "Etc/GMT+3"],
+        "-120": ["America/Noronha", "Atlantic/South_Georgia", "Etc/GMT+2"],
+        "-60": ["Atlantic/Azores", "Atlantic/Cape_Verde", "Etc/GMT+1"],
+        "0": ["UTC", "Europe/London", "Atlantic/Azores"],
+        "60": ["Europe/London", "Europe/Warsaw", "Europe/Berlin", "Africa/Lagos", "Etc/GMT-1"],
+        "120": ["Europe/Warsaw", "Europe/Berlin", "Europe/Athens", "Africa/Johannesburg", "Africa/Cairo", "Etc/GMT-2"],
+        "180": ["Africa/Cairo", "Europe/Moscow", "Asia/Riyadh", "Africa/Nairobi", "Etc/GMT-3"],
+        "240": ["Asia/Dubai", "Asia/Baku", "Europe/Samara", "Etc/GMT-4"],
+        "300": ["Asia/Karachi", "Asia/Tashkent", "Indian/Maldives", "Etc/GMT-5"],
+        "360": ["Asia/Dhaka", "Asia/Almaty", "Asia/Thimphu", "Etc/GMT-6"],
+        "420": ["Asia/Bangkok", "Asia/Jakarta", "Asia/Ho_Chi_Minh", "Etc/GMT-7"],
+        "480": ["Asia/Shanghai", "Asia/Singapore", "Australia/Perth", "Etc/GMT-8"],
+        "540": ["Asia/Tokyo", "Asia/Seoul", "Asia/Jayapura", "Etc/GMT-9"],
+        "600": ["Australia/Sydney", "Australia/Brisbane", "Pacific/Port_Moresby", "Etc/GMT-10"],
+        "660": ["Australia/Sydney", "Pacific/Noumea", "Pacific/Guadalcanal", "Etc/GMT-11"],
+        "720": ["Pacific/Auckland", "Pacific/Fiji", "Asia/Kamchatka", "Etc/GMT-12"],
+        "780": ["Pacific/Auckland", "Pacific/Tongatapu", "Pacific/Apia", "Etc/GMT-13"],
+        "840": ["Pacific/Kiritimati", "Etc/GMT-14"]
+      };
+
+      const ABBREVIATIONS = {
+        "UTC": { standard: "UTC" },
+        "Etc/GMT+12": { standard: "UTC-12" },
+        "Etc/GMT+11": { standard: "UTC-11" },
+        "Etc/GMT+10": { standard: "UTC-10" },
+        "Etc/GMT+9": { standard: "UTC-9" },
+        "Etc/GMT+8": { standard: "UTC-8" },
+        "Etc/GMT+7": { standard: "UTC-7" },
+        "Etc/GMT+6": { standard: "UTC-6" },
+        "Etc/GMT+5": { standard: "UTC-5" },
+        "Etc/GMT+4": { standard: "UTC-4" },
+        "Etc/GMT+3": { standard: "UTC-3" },
+        "Etc/GMT+2": { standard: "UTC-2" },
+        "Etc/GMT+1": { standard: "UTC-1" },
+        "Etc/GMT-1": { standard: "UTC+1" },
+        "Etc/GMT-2": { standard: "UTC+2" },
+        "Etc/GMT-3": { standard: "UTC+3" },
+        "Etc/GMT-4": { standard: "UTC+4" },
+        "Etc/GMT-5": { standard: "UTC+5" },
+        "Etc/GMT-6": { standard: "UTC+6" },
+        "Etc/GMT-7": { standard: "UTC+7" },
+        "Etc/GMT-8": { standard: "UTC+8" },
+        "Etc/GMT-9": { standard: "UTC+9" },
+        "Etc/GMT-10": { standard: "UTC+10" },
+        "Etc/GMT-11": { standard: "UTC+11" },
+        "Etc/GMT-12": { standard: "UTC+12" },
+        "Etc/GMT-13": { standard: "UTC+13" },
+        "Etc/GMT-14": { standard: "UTC+14" },
+        "Pacific/Pago_Pago": { standard: "SST" },
+        "Pacific/Niue": { standard: "NUT" },
+        "Pacific/Honolulu": { standard: "HST" },
+        "Pacific/Rarotonga": { standard: "CKT" },
+        "America/Anchorage": { standard: "AKST", daylight: "AKDT" },
+        "America/Los_Angeles": { standard: "PST", daylight: "PDT" },
+        "America/Denver": { standard: "MST", daylight: "MDT" },
+        "America/Phoenix": { standard: "MST" },
+        "America/Regina": { standard: "CST" },
+        "America/Chicago": { standard: "CST", daylight: "CDT" },
+        "America/New_York": { standard: "EST", daylight: "EDT" },
+        "America/Halifax": { standard: "AST", daylight: "ADT" },
+        "America/Santo_Domingo": { standard: "AST" },
+        "America/Sao_Paulo": { standard: "BRT" },
+        "America/Argentina/Buenos_Aires": { standard: "ART" },
+        "America/Noronha": { standard: "FNT" },
+        "Atlantic/South_Georgia": { standard: "GST" },
+        "Atlantic/Azores": { standard: "AZOT", daylight: "AZOST" },
+        "Atlantic/Cape_Verde": { standard: "CVT" },
+        "Europe/London": { standard: "GMT", daylight: "BST" },
+        "Europe/Warsaw": { standard: "CET", daylight: "CEST" },
+        "Europe/Berlin": { standard: "CET", daylight: "CEST" },
+        "Europe/Paris": { standard: "CET", daylight: "CEST" },
+        "Europe/Athens": { standard: "EET", daylight: "EEST" },
+        "Europe/Moscow": { standard: "MSK" },
+        "Europe/Samara": { standard: "SAMT" },
+        "Africa/Lagos": { standard: "WAT" },
+        "Africa/Johannesburg": { standard: "SAST" },
+        "Africa/Cairo": { standard: "EET", daylight: "EEST" },
+        "Africa/Nairobi": { standard: "EAT" },
+        "Asia/Riyadh": { standard: "AST" },
+        "Asia/Dubai": { standard: "GST" },
+        "Asia/Baku": { standard: "AZT" },
+        "Asia/Karachi": { standard: "PKT" },
+        "Asia/Tashkent": { standard: "UZT" },
+        "Indian/Maldives": { standard: "MVT" },
+        "Asia/Dhaka": { standard: "BST" },
+        "Asia/Almaty": { standard: "ALMT" },
+        "Asia/Thimphu": { standard: "BTT" },
+        "Asia/Bangkok": { standard: "ICT" },
+        "Asia/Jakarta": { standard: "WIB" },
+        "Asia/Ho_Chi_Minh": { standard: "ICT" },
+        "Asia/Shanghai": { standard: "CST" },
+        "Asia/Singapore": { standard: "SGT" },
+        "Australia/Perth": { standard: "AWST" },
+        "Asia/Tokyo": { standard: "JST" },
+        "Asia/Seoul": { standard: "KST" },
+        "Asia/Jayapura": { standard: "WIT" },
+        "Australia/Sydney": { standard: "AEST", daylight: "AEDT" },
+        "Australia/Brisbane": { standard: "AEST" },
+        "Pacific/Port_Moresby": { standard: "PGT" },
+        "Pacific/Noumea": { standard: "NCT" },
+        "Pacific/Guadalcanal": { standard: "SBT" },
+        "Pacific/Auckland": { standard: "NZST", daylight: "NZDT" },
+        "Pacific/Fiji": { standard: "FJT" },
+        "Asia/Kamchatka": { standard: "PETT" },
+        "Pacific/Tongatapu": { standard: "TOT" },
+        "Pacific/Apia": { standard: "WSST" },
+        "Pacific/Kiritimati": { standard: "LINT" }
+      };
+
+      const WIKI_TITLES_BY_TIME_ZONE = {
+        "UTC": "Coordinated Universal Time",
+        "Pacific/Pago_Pago": "Samoa Time Zone",
+        "Pacific/Niue": "Time in Niue",
+        "Pacific/Honolulu": "Hawaii-Aleutian Time Zone",
+        "Pacific/Rarotonga": "Time in the Cook Islands",
+        "America/Anchorage": "Alaska Time Zone",
+        "America/Los_Angeles": "Pacific Time Zone",
+        "America/Denver": "Mountain Time Zone",
+        "America/Phoenix": "Mountain Time Zone",
+        "America/Regina": "Central Time Zone",
+        "America/Chicago": "Central Time Zone",
+        "America/New_York": "Eastern Time Zone",
+        "America/Halifax": "Atlantic Time Zone",
+        "America/Santo_Domingo": "Atlantic Time Zone",
+        "America/Sao_Paulo": "Brasilia Time",
+        "America/Argentina/Buenos_Aires": "Time in Argentina",
+        "America/Noronha": "Fernando de Noronha Time",
+        "Atlantic/South_Georgia": "Time in South Georgia and the South Sandwich Islands",
+        "Atlantic/Azores": "Azores Time",
+        "Atlantic/Cape_Verde": "Cape Verde Time",
+        "Europe/London": { standard: "Greenwich Mean Time", daylight: "British Summer Time" },
+        "Europe/Warsaw": { standard: "Central European Time", daylight: "Central European Summer Time" },
+        "Europe/Berlin": { standard: "Central European Time", daylight: "Central European Summer Time" },
+        "Europe/Paris": { standard: "Central European Time", daylight: "Central European Summer Time" },
+        "Europe/Athens": { standard: "Eastern European Time", daylight: "Eastern European Summer Time" },
+        "Europe/Moscow": "Moscow Time",
+        "Europe/Samara": "Samara Time",
+        "Africa/Lagos": "West Africa Time",
+        "Africa/Johannesburg": "South African Standard Time",
+        "Africa/Cairo": { standard: "Eastern European Time", daylight: "Eastern European Summer Time" },
+        "Africa/Nairobi": "East Africa Time",
+        "Asia/Riyadh": "Arabia Standard Time",
+        "Asia/Dubai": "Gulf Standard Time",
+        "Asia/Baku": "Azerbaijan Time",
+        "Asia/Karachi": "Pakistan Standard Time",
+        "Asia/Tashkent": "Time in Uzbekistan",
+        "Indian/Maldives": "Maldives Time",
+        "Asia/Dhaka": "Bangladesh Standard Time",
+        "Asia/Almaty": "Time in Kazakhstan",
+        "Asia/Thimphu": "Bhutan Time",
+        "Asia/Bangkok": "Indochina Time",
+        "Asia/Jakarta": "Western Indonesian Time",
+        "Asia/Ho_Chi_Minh": "Indochina Time",
+        "Asia/Shanghai": "China Standard Time",
+        "Asia/Singapore": "Singapore Standard Time",
+        "Australia/Perth": "Australian Western Standard Time",
+        "Asia/Tokyo": "Japan Standard Time",
+        "Asia/Seoul": "Korea Standard Time",
+        "Asia/Jayapura": "Eastern Indonesia Time",
+        "Australia/Sydney": { standard: "Australian Eastern Standard Time", daylight: "Australian Eastern Daylight Time" },
+        "Australia/Brisbane": "Australian Eastern Standard Time",
+        "Pacific/Port_Moresby": "Time in Papua New Guinea",
+        "Pacific/Noumea": "New Caledonia Time",
+        "Pacific/Guadalcanal": "Solomon Islands Time",
+        "Pacific/Auckland": { standard: "New Zealand Standard Time", daylight: "New Zealand Daylight Time" },
+        "Pacific/Fiji": "Fiji Time",
+        "Asia/Kamchatka": "Kamchatka Time",
+        "Pacific/Tongatapu": "Tonga Time",
+        "Pacific/Apia": "Samoa Time Zone",
+        "Pacific/Kiritimati": "Line Islands Time"
+      };
+
+      const WIKI_TITLES_BY_ABBREVIATION = {
+        "UTC": "Coordinated Universal Time",
+        "GMT": "Greenwich Mean Time",
+        "BST": "British Summer Time",
+        "CET": "Central European Time",
+        "CEST": "Central European Summer Time",
+        "EET": "Eastern European Time",
+        "EEST": "Eastern European Summer Time",
+        "MSK": "Moscow Time",
+        "SAMT": "Samara Time",
+        "WAT": "West Africa Time",
+        "SAST": "South African Standard Time",
+        "EAT": "East Africa Time",
+        "PST": "Pacific Time Zone",
+        "PDT": "Pacific Time Zone",
+        "MST": "Mountain Time Zone",
+        "MDT": "Mountain Time Zone",
+        "CST": "Central Time Zone",
+        "CDT": "Central Time Zone",
+        "EST": "Eastern Time Zone",
+        "EDT": "Eastern Time Zone",
+        "AST": "Atlantic Time Zone",
+        "ADT": "Atlantic Time Zone",
+        "AKST": "Alaska Time Zone",
+        "AKDT": "Alaska Time Zone",
+        "HST": "Hawaii-Aleutian Time Zone",
+        "JST": "Japan Standard Time",
+        "KST": "Korea Standard Time",
+        "SGT": "Singapore Standard Time",
+        "AWST": "Australian Western Standard Time",
+        "AEST": "Australian Eastern Standard Time",
+        "AEDT": "Australian Eastern Daylight Time",
+        "NZST": "New Zealand Standard Time",
+        "NZDT": "New Zealand Daylight Time"
+      };
+
+      function el(name, attributes = {}) {
+        const node = document.createElementNS(SVG_NS, name);
+        Object.entries(attributes).forEach(([key, value]) => {
+          if (value !== null && value !== undefined) {
+            node.setAttribute(key, value);
+          }
+        });
+        return node;
+      }
+
+      function textNode(name, attributes, text) {
+        const node = el(name, attributes);
+        node.textContent = text;
+        return node;
+      }
+
+      function formatter(locale, options) {
+        const key = `${locale}:${JSON.stringify(options)}`;
+        if (!zoneFormatterCache.has(key)) {
+          zoneFormatterCache.set(key, new Intl.DateTimeFormat(locale, options));
+        }
+        return zoneFormatterCache.get(key);
+      }
+
+      function partsForZone(date, timeZone) {
+        const dtf = formatter("en-US-u-ca-gregory-nu-latn", {
+          timeZone,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hourCycle: "h23"
+        });
+        const values = {};
+        dtf.formatToParts(date).forEach((part) => {
+          if (part.type !== "literal") {
+            values[part.type] = Number(part.value);
+          }
+        });
+        if (values.hour === 24) {
+          values.hour = 0;
+        }
+        return values;
+      }
+
+      function offsetMinutesForZone(date, timeZone) {
+        if (timeZone === "UTC") {
+          return 0;
+        }
+        const parts = partsForZone(date, timeZone);
+        const localAsUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+        return Math.round((localAsUtc - date.getTime()) / 60000);
+      }
+
+      function fixedOffsetZone(offsetMinutes) {
+        if (offsetMinutes === 0) {
+          return "UTC";
+        }
+        const hours = Math.abs(offsetMinutes / 60);
+        return `Etc/GMT${offsetMinutes > 0 ? "-" : "+"}${hours}`;
+      }
+
+      function offsetLabel(offsetMinutes) {
+        if (offsetMinutes === 0) {
+          return "UTC";
+        }
+        const sign = offsetMinutes > 0 ? "+" : "-";
+        const absolute = Math.abs(offsetMinutes);
+        const hours = Math.floor(absolute / 60);
+        const minutes = absolute % 60;
+        return minutes ? `UTC${sign}${hours}:${String(minutes).padStart(2, "0")}` : `UTC${sign}${hours}`;
+      }
+
+      function formatTime(date, timeZone) {
+        return formatter("en-GB", {
+          timeZone,
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23"
+        }).format(date);
+      }
+
+      function formatTimeAmPm(date, timeZone) {
+        return formatter("en-US", {
+          timeZone,
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true
+        }).format(date).replace(/\s+/g, " ").toLowerCase();
+      }
+
+      function hourInZone(date, timeZone) {
+        return partsForZone(date, timeZone).hour;
+      }
+
+      function isDstNow(date, timeZone) {
+        if (timeZone === "UTC" || timeZone.startsWith("Etc/")) {
+          return false;
+        }
+        const year = date.getUTCFullYear();
+        const current = offsetMinutesForZone(date, timeZone);
+        const january = offsetMinutesForZone(new Date(Date.UTC(year, 0, 1, 12, 0, 0)), timeZone);
+        const july = offsetMinutesForZone(new Date(Date.UTC(year, 6, 1, 12, 0, 0)), timeZone);
+        return current > Math.min(january, july);
+      }
+
+      function browserShortName(date, timeZone) {
+        const dtf = formatter("en-US", {
+          timeZone,
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+          timeZoneName: "short"
+        });
+        const name = dtf.formatToParts(date).find((part) => part.type === "timeZoneName");
+        return name ? name.value : "";
+      }
+
+      function displayAbbreviation(date, timeZone, dst) {
+        const mapped = ABBREVIATIONS[timeZone];
+        if (mapped) {
+          return dst && mapped.daylight ? mapped.daylight : mapped.standard;
+        }
+        const browserName = browserShortName(date, timeZone);
+        if (browserName && !/^GMT[+-]/.test(browserName)) {
+          return browserName;
+        }
+        return offsetLabel(offsetMinutesForZone(date, timeZone));
+      }
+
+      function wikipediaArticleUrl(title) {
+        return `https://en.wikipedia.org/wiki/${encodeURIComponent(title.trim().replace(/\s+/g, "_"))}`;
+      }
+
+      function wikipediaSearchUrl(query) {
+        return `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(query)}`;
+      }
+
+      function utcOffsetArticleTitle(label) {
+        const match = /^UTC([+-])(\d{1,2})(?::(\d{2}))?$/.exec(label);
+        if (!match) {
+          return null;
+        }
+        return `UTC${match[1]}${match[2].padStart(2, "0")}:${match[3] || "00"}`;
+      }
+
+      function wikipediaUrlForTimeZone(timeZone, abbreviation, dst) {
+        const zoneTitle = WIKI_TITLES_BY_TIME_ZONE[timeZone];
+        if (typeof zoneTitle === "string") {
+          return wikipediaArticleUrl(zoneTitle);
+        }
+        if (zoneTitle) {
+          return wikipediaArticleUrl(dst && zoneTitle.daylight ? zoneTitle.daylight : zoneTitle.standard);
+        }
+
+        const utcTitle = utcOffsetArticleTitle(abbreviation);
+        if (utcTitle) {
+          return wikipediaArticleUrl(utcTitle);
+        }
+
+        const abbreviationTitle = WIKI_TITLES_BY_ABBREVIATION[abbreviation];
+        if (abbreviationTitle) {
+          return wikipediaArticleUrl(abbreviationTitle);
+        }
+
+        return wikipediaSearchUrl(`${abbreviation} ${timeZone.replace(/_/g, " ")} time zone`);
+      }
+
+      function openWikipediaForTimeZone(event, timeZone, abbreviation, dst) {
+        event.preventDefault();
+        event.stopPropagation();
+        const opened = window.open(
+          wikipediaUrlForTimeZone(timeZone, abbreviation, dst),
+          "_blank",
+          "noopener,noreferrer"
+        );
+        if (opened) {
+          opened.opener = null;
+        }
+      }
+
+      function renderTimeZoneName(group, x, y, abbreviation, timeZone, dst) {
+        const name = textNode("text", {
+          x,
+          y,
+          class: "clock-name",
+          role: "link",
+          tabindex: "0",
+          "aria-label": `Open English Wikipedia page for ${abbreviation}`
+        }, abbreviation);
+        name.addEventListener("click", (event) => openWikipediaForTimeZone(event, timeZone, abbreviation, dst));
+        name.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            openWikipediaForTimeZone(event, timeZone, abbreviation, dst);
+          }
+        });
+        group.appendChild(name);
+      }
+
+      function slotX(offsetHours) {
+        return MAP.x + (offsetHours + 12) * SLOT_WIDTH;
+      }
+
+      function renderGeographicData() {
+        const data = window.MAP_DATA;
+        const landLayer = document.getElementById("landLayer");
+        const countryBorderLayer = document.getElementById("countryBorderLayer");
+        const timezoneLayer = document.getElementById("timezoneLayer");
+        if (!data) {
+          console.warn("map-data.js was not loaded; geographic map paths are unavailable.");
+          return;
+        }
+
+        data.landPaths.forEach((pathData) => {
+          landLayer.appendChild(el("path", {
+            d: pathData,
+            class: "land"
+          }));
+        });
+
+        data.timezonePaths.forEach((zone) => {
+          const path = el("path", {
+            d: zone.path,
+            class: "zone-boundary timezone-ocean-boundary",
+            "data-tzid": zone.tzid
+          });
+          timezoneLayer.appendChild(path);
+        });
+
+        (data.countryBorderPaths || []).forEach((pathData) => {
+          countryBorderLayer.appendChild(el("path", {
+            d: pathData,
+            class: "country-border"
+          }));
+        });
+      }
+
+      function renderStaticMap() {
+        const bandLayer = document.getElementById("bandLayer");
+        const gridLayer = document.getElementById("gridLayer");
+        const labelLayer = document.getElementById("labelLayer");
+
+        OFFSETS.forEach((offset, index) => {
+          const x = slotX(offset);
+          bandLayer.appendChild(el("rect", {
+            x,
+            y: 0,
+            width: SLOT_WIDTH,
+            height: MAP.height,
+            class: index % 2 === 0 ? "band-even" : "band-odd"
+          }));
+
+          const label = offset === 0 ? "0" : offset > 0 ? `+${offset}` : String(offset);
+          labelLayer.appendChild(textNode("text", {
+            x: x + SLOT_WIDTH / 2,
+            y: 598,
+            class: "offset-label"
+          }, label));
+        });
+
+        for (let i = 1; i < OFFSETS.length; i += 1) {
+          const boundaryX = slotX(-12 + i);
+          gridLayer.appendChild(el("line", {
+            x1: boundaryX,
+            y1: 0,
+            x2: boundaryX,
+            y2: MAP.height,
+            class: "map-grid"
+          }));
+        }
+
+        renderGeographicData();
+      }
+
+      function chooseZoneForOffset(date, offsetMinutes) {
+        if (offsetMinutesForZone(date, localTimeZone) === offsetMinutes) {
+          return localTimeZone;
+        }
+        const candidates = CANDIDATES[String(offsetMinutes)] || [fixedOffsetZone(offsetMinutes)];
+        for (const timeZone of candidates) {
+          try {
+            if (offsetMinutesForZone(date, timeZone) === offsetMinutes) {
+              return timeZone;
+            }
+          } catch (error) {
+            continue;
+          }
+        }
+        return fixedOffsetZone(offsetMinutes);
+      }
+
+      function clearClockLayer() {
+        while (clockLayer.firstChild) {
+          clockLayer.removeChild(clockLayer.firstChild);
+        }
+      }
+
+      function updateTooltipPosition(event) {
+        tooltip.style.left = `${event.clientX}px`;
+        tooltip.style.top = `${event.clientY}px`;
+      }
+
+      function showTooltip(event, message = "Daylight Saving Time") {
+        tooltip.textContent = message;
+        updateTooltipPosition(event);
+        tooltip.classList.add("visible");
+      }
+
+      function hideTooltip() {
+        tooltip.classList.remove("visible");
+      }
+
+      function openAboutDialog() {
+        const activeElement = document.activeElement;
+        aboutReturnFocus = activeElement && typeof activeElement.focus === "function" ? activeElement : aboutButton;
+        aboutOverlay.hidden = false;
+        aboutButton.setAttribute("aria-expanded", "true");
+        aboutOk.focus();
+      }
+
+      function closeAboutDialog() {
+        aboutOverlay.hidden = true;
+        aboutButton.setAttribute("aria-expanded", "false");
+        if (aboutReturnFocus) {
+          aboutReturnFocus.focus();
+        }
+      }
+
+      function updateTimezoneLineVisibility() {
+        if (timezoneLinesToggle.checked) {
+          timezoneLayer.removeAttribute("hidden");
+        } else {
+          timezoneLayer.setAttribute("hidden", "");
+        }
+      }
+
+      function renderDstBadge(group, x, y) {
+        const badge = el("g", {
+          class: "dst-badge",
+          tabindex: "0",
+          role: "img",
+          "aria-label": "Daylight Saving Time"
+        });
+        badge.appendChild(el("rect", {
+          x: x - 14,
+          y: y - 8,
+          width: 28,
+          height: 16
+        }));
+        badge.appendChild(textNode("text", {
+          x,
+          y
+        }, "DST"));
+        badge.addEventListener("mouseenter", (event) => showTooltip(event));
+        badge.addEventListener("mousemove", updateTooltipPosition);
+        badge.addEventListener("mouseleave", hideTooltip);
+        badge.addEventListener("focus", (event) => {
+          const bounds = event.currentTarget.getBoundingClientRect();
+          tooltip.textContent = "Daylight Saving Time";
+          tooltip.style.left = `${bounds.left + bounds.width / 2}px`;
+          tooltip.style.top = `${bounds.top}px`;
+          tooltip.classList.add("visible");
+        });
+        badge.addEventListener("blur", hideTooltip);
+        group.appendChild(badge);
+      }
+
+      function renderHomeIcon(group, x, y) {
+        const icon = el("path", {
+          class: "home-icon",
+          d: `M${x - 12} ${y + 1} L${x} ${y - 10} L${x + 12} ${y + 1} L${x + 9} ${y + 1} L${x + 9} ${y + 12} L${x + 3} ${y + 12} L${x + 3} ${y + 5} L${x - 3} ${y + 5} L${x - 3} ${y + 12} L${x - 9} ${y + 12} L${x - 9} ${y + 1} Z`
+        });
+        group.appendChild(icon);
+      }
+
+      function renderClocks(now) {
+        clearClockLayer();
+        const localOffsetMinutes = offsetMinutesForZone(now, localTimeZone);
+
+        OFFSETS.forEach((offsetHour) => {
+          const offsetMinutes = offsetHour * 60;
+          const x = slotX(offsetHour);
+          const centerX = x + SLOT_WIDTH / 2;
+          const timeZone = chooseZoneForOffset(now, offsetMinutes);
+          const dst = isDstNow(now, timeZone);
+          const hour = hourInZone(now, timeZone);
+          const colors = CLOCK_COLORS[hour];
+          const isLocalSlot = offsetMinutes === localOffsetMinutes;
+          const cardWidth = Math.max(38, SLOT_WIDTH - 5);
+          const group = el("g", {
+            "data-offset": offsetLabel(offsetMinutes),
+            "data-zone": timeZone,
+            "data-background": colors.name
+          });
+
+          group.appendChild(el("rect", {
+            x: centerX - cardWidth / 2,
+            y: MAP.clockY,
+            width: cardWidth,
+            height: MAP.clockHeight,
+            class: "clock-card",
+            fill: colors.background
+          }));
+          group.appendChild(textNode("text", {
+            x: centerX,
+            y: MAP.clockY + MAP.clockHeight / 2 + 1,
+            class: "clock-time",
+            fill: colors.text
+          }, formatTime(now, timeZone)));
+          const timeAmPm = formatTimeAmPm(now, timeZone);
+          const hitArea = el("rect", {
+            x: centerX - cardWidth / 2,
+            y: MAP.clockY,
+            width: cardWidth,
+            height: MAP.clockHeight,
+            class: "clock-hit-area",
+            "aria-label": timeAmPm
+          });
+          hitArea.addEventListener("mouseenter", (event) => showTooltip(event, timeAmPm));
+          hitArea.addEventListener("mousemove", updateTooltipPosition);
+          hitArea.addEventListener("mouseleave", hideTooltip);
+          group.appendChild(hitArea);
+          const abbreviation = displayAbbreviation(now, timeZone, dst);
+          renderTimeZoneName(group, centerX, MAP.nameY, abbreviation, timeZone, dst);
+          group.appendChild(textNode("text", {
+            x: centerX,
+            y: MAP.zoneY,
+            class: "clock-zone"
+          }, offsetLabel(offsetMinutes)));
+
+          if (dst) {
+            renderDstBadge(group, centerX, MAP.dstY);
+          }
+          if (isLocalSlot) {
+            renderHomeIcon(group, centerX, MAP.dstY + (dst ? 24 : 4));
+          }
+          clockLayer.appendChild(group);
+        });
+
+        const localDst = isDstNow(now, localTimeZone);
+        localZoneName.textContent = displayAbbreviation(now, localTimeZone, localDst);
+        localOffset.textContent = offsetLabel(localOffsetMinutes);
+        localClock.textContent = formatTime(now, localTimeZone);
+      }
+
+      let lastMinute = -1;
+      let lastTick = Date.now();
+
+      function update(force = false) {
+        const now = new Date();
+        const minuteKey = Math.floor(now.getTime() / 60000);
+        const slept = now.getTime() - lastTick > 2500;
+        if (force || slept || minuteKey !== lastMinute) {
+          renderClocks(now);
+          lastMinute = minuteKey;
+        }
+        lastTick = now.getTime();
+      }
+
+      aboutButton.addEventListener("click", openAboutDialog);
+      aboutClose.addEventListener("click", closeAboutDialog);
+      aboutOk.addEventListener("click", closeAboutDialog);
+      timezoneLinesToggle.addEventListener("input", updateTimezoneLineVisibility);
+      timezoneLinesToggle.addEventListener("change", updateTimezoneLineVisibility);
+      aboutOverlay.addEventListener("click", (event) => {
+        if (event.target === aboutOverlay) {
+          closeAboutDialog();
+        }
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !aboutOverlay.hidden) {
+          closeAboutDialog();
+        }
+      });
+
+      renderStaticMap();
+      updateTimezoneLineVisibility();
+      update(true);
+      window.setInterval(() => update(false), 1000);
+      window.addEventListener("focus", () => update(true));
+      window.addEventListener("pageshow", () => update(true));
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) {
+          update(true);
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
