@@ -4,6 +4,8 @@ A standalone HTML/SVG world time-zone map with live clocks for UTC-12 through UT
 
 The page is built with plain HTML, CSS, and vanilla JavaScript. It does not use React or any frontend framework.
 
+Access the webpage: https://socarpl.github.io/worldtimezones/
+
 ## Features
 
 - Responsive SVG world map.
