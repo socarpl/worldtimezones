@@ -119,12 +119,15 @@
     .map-region {
       display: grid;
       position: relative;
+      grid-template-rows: minmax(0, 1fr) auto auto;
       min-height: 0;
       padding: 18px;
+      overflow: hidden;
     }
 
     .map-scroll {
       width: 100%;
+      height: 100%;
       min-height: 0;
       overflow: auto;
       border: 1px solid rgba(48, 67, 91, 0.2);
@@ -142,6 +145,7 @@
     .map-controls {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 10px;
       margin: 10px 2px 0;
       color: #233047;
@@ -149,7 +153,14 @@
       font-weight: 700;
     }
 
-    .map-controls input {
+    .map-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 22px;
+    }
+
+    .map-control input {
       width: 16px;
       height: 16px;
       margin: 0;
@@ -161,7 +172,7 @@
       width: 100%;
       min-width: 1180px;
       height: auto;
-      aspect-ratio: 1440 / 760;
+      aspect-ratio: 1560 / 760;
       user-select: none;
     }
 
@@ -447,7 +458,7 @@
       }
 
       .map-canvas {
-        min-width: 1080px;
+        min-width: 1170px;
       }
     }
   </style>
@@ -469,9 +480,9 @@
 
     <section class="map-region" aria-label="Live world time zone map">
       <div class="map-scroll" id="mapScroll">
-        <svg class="map-canvas" id="tzMap" viewBox="0 0 1440 760" role="img" aria-labelledby="mapTitle mapDesc">
+        <svg class="map-canvas" id="tzMap" viewBox="0 0 1560 760" role="img" aria-labelledby="mapTitle mapDesc">
           <title id="mapTitle">Live world time zone map</title>
-          <desc id="mapDesc">A responsive vector world map using Natural Earth land and country-border polygons, with time-zone boundaries shown over ocean.</desc>
+          <desc id="mapDesc">A responsive vector world map scaled from UTC-12 through UTC+12, with additional UTC+13 and UTC+14 clock boxes.</desc>
           <defs id="mapDefs">
             <linearGradient id="oceanGradient" x1="0" x2="0" y1="0" y2="1">
               <stop offset="0" stop-color="#9fd0f1"></stop>
@@ -480,9 +491,10 @@
             </linearGradient>
           </defs>
 
-          <rect width="1440" height="760" fill="url(#oceanGradient)"></rect>
+          <rect width="1560" height="760" fill="url(#oceanGradient)"></rect>
           <g id="bandLayer"></g>
           <g id="gridLayer"></g>
+          <g id="extraZoneLayer" hidden></g>
           <g id="landLayer" aria-hidden="true"></g>
           <g id="countryBorderLayer" aria-hidden="true"></g>
           <g id="timezoneLayer" aria-hidden="true" hidden></g>
@@ -490,10 +502,16 @@
           <g id="clockLayer"></g>
         </svg>
       </div>
-      <label class="map-controls">
-        <input id="timezoneLinesToggle" type="checkbox" aria-controls="timezoneLayer">
-        <span>Geopolitical timezone lines</span>
-      </label>
+      <div class="map-controls">
+        <label class="map-control">
+          <input id="timezoneLinesToggle" type="checkbox" aria-controls="timezoneLayer">
+          <span>Geopolitical timezone lines</span>
+        </label>
+        <label class="map-control">
+          <input id="extraZonesToggle" type="checkbox" aria-controls="extraZoneLayer clockLayer">
+          <span>show UTC+13 and UTC+14</span>
+        </label>
+      </div>
       <p class="attribution">Land and country-border data: Natural Earth. Time-zone boundaries: OpenStreetMap contributors via timezone-boundary-builder 2026c.</p>
       <div class="about-overlay" id="aboutOverlay" hidden>
         <section class="win98-dialog" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
@@ -522,9 +540,9 @@
     (() => {
       const SVG_NS = "http://www.w3.org/2000/svg";
       const MAP = {
-        x: 18,
+        x: 0,
         y: 0,
-        width: 1404,
+        width: 1440,
         height: 760,
         clockY: 618,
         clockHeight: 42,
@@ -532,8 +550,9 @@
         zoneY: 704,
         dstY: 724
       };
-      const OFFSETS = Array.from({ length: 27 }, (_, index) => -12 + index);
-      const SLOT_WIDTH = MAP.width / OFFSETS.length;
+      const MAP_OFFSETS = Array.from({ length: 25 }, (_, index) => -12 + index);
+      const EXTRA_OFFSETS = [13, 14];
+      const SLOT_WIDTH = MAP.width / MAP_OFFSETS.length;
       const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
       const zoneFormatterCache = new Map();
       const tooltip = document.getElementById("tooltip");
@@ -546,7 +565,9 @@
       const aboutClose = document.getElementById("aboutClose");
       const aboutOk = document.getElementById("aboutOk");
       const timezoneLinesToggle = document.getElementById("timezoneLinesToggle");
+      const extraZonesToggle = document.getElementById("extraZonesToggle");
       const timezoneLayer = document.getElementById("timezoneLayer");
+      const extraZoneLayer = document.getElementById("extraZoneLayer");
       let aboutReturnFocus = null;
 
       const CLOCK_COLORS = [
@@ -999,6 +1020,10 @@
         return MAP.x + (offsetHours + 12) * SLOT_WIDTH;
       }
 
+      function activeClockOffsets() {
+        return extraZonesToggle.checked ? MAP_OFFSETS.concat(EXTRA_OFFSETS) : MAP_OFFSETS;
+      }
+
       function renderGeographicData() {
         const data = window.MAP_DATA;
         const landLayer = document.getElementById("landLayer");
@@ -1038,7 +1063,7 @@
         const gridLayer = document.getElementById("gridLayer");
         const labelLayer = document.getElementById("labelLayer");
 
-        OFFSETS.forEach((offset, index) => {
+        MAP_OFFSETS.forEach((offset, index) => {
           const x = slotX(offset);
           bandLayer.appendChild(el("rect", {
             x,
@@ -1056,7 +1081,7 @@
           }, label));
         });
 
-        for (let i = 1; i < OFFSETS.length; i += 1) {
+        for (let i = 1; i < MAP_OFFSETS.length; i += 1) {
           const boundaryX = slotX(-12 + i);
           gridLayer.appendChild(el("line", {
             x1: boundaryX,
@@ -1066,6 +1091,37 @@
             class: "map-grid"
           }));
         }
+
+        EXTRA_OFFSETS.forEach((offset, index) => {
+          const x = slotX(offset);
+          extraZoneLayer.appendChild(el("rect", {
+            x,
+            y: 0,
+            width: SLOT_WIDTH,
+            height: MAP.height,
+            class: index % 2 === 0 ? "band-odd" : "band-even"
+          }));
+          extraZoneLayer.appendChild(textNode("text", {
+            x: x + SLOT_WIDTH / 2,
+            y: 598,
+            class: "offset-label"
+          }, `+${offset}`));
+          extraZoneLayer.appendChild(el("line", {
+            x1: x,
+            y1: 0,
+            x2: x,
+            y2: MAP.height,
+            class: "map-grid"
+          }));
+        });
+
+        extraZoneLayer.appendChild(el("line", {
+          x1: slotX(15),
+          y1: 0,
+          x2: slotX(15),
+          y2: MAP.height,
+          class: "map-grid"
+        }));
 
         renderGeographicData();
       }
@@ -1132,6 +1188,15 @@
         }
       }
 
+      function updateExtraZoneVisibility() {
+        if (extraZonesToggle.checked) {
+          extraZoneLayer.removeAttribute("hidden");
+        } else {
+          extraZoneLayer.setAttribute("hidden", "");
+        }
+        update(true);
+      }
+
       function renderDstBadge(group, x, y) {
         const badge = el("g", {
           class: "dst-badge",
@@ -1175,7 +1240,7 @@
         clearClockLayer();
         const localOffsetMinutes = offsetMinutesForZone(now, localTimeZone);
 
-        OFFSETS.forEach((offsetHour) => {
+        activeClockOffsets().forEach((offsetHour) => {
           const offsetMinutes = offsetHour * 60;
           const x = slotX(offsetHour);
           const centerX = x + SLOT_WIDTH / 2;
@@ -1260,6 +1325,8 @@
       aboutOk.addEventListener("click", closeAboutDialog);
       timezoneLinesToggle.addEventListener("input", updateTimezoneLineVisibility);
       timezoneLinesToggle.addEventListener("change", updateTimezoneLineVisibility);
+      extraZonesToggle.addEventListener("input", updateExtraZoneVisibility);
+      extraZonesToggle.addEventListener("change", updateExtraZoneVisibility);
       aboutOverlay.addEventListener("click", (event) => {
         if (event.target === aboutOverlay) {
           closeAboutDialog();
@@ -1273,6 +1340,7 @@
 
       renderStaticMap();
       updateTimezoneLineVisibility();
+      updateExtraZoneVisibility();
       update(true);
       window.setInterval(() => update(false), 1000);
       window.addEventListener("focus", () => update(true));
