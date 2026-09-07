@@ -172,7 +172,6 @@
       width: 100%;
       min-width: 1180px;
       height: auto;
-      aspect-ratio: 1560 / 760;
       user-select: none;
     }
 
@@ -480,7 +479,7 @@
 
     <section class="map-region" aria-label="Live world time zone map">
       <div class="map-scroll" id="mapScroll">
-        <svg class="map-canvas" id="tzMap" viewBox="0 0 1560 760" role="img" aria-labelledby="mapTitle mapDesc">
+        <svg class="map-canvas" id="tzMap" viewBox="0 0 1440 760" role="img" aria-labelledby="mapTitle mapDesc">
           <title id="mapTitle">Live world time zone map</title>
           <desc id="mapDesc">A responsive vector world map scaled from UTC-12 through UTC+12, with additional UTC+13 and UTC+14 clock boxes.</desc>
           <defs id="mapDefs">
@@ -568,6 +567,7 @@
       const extraZonesToggle = document.getElementById("extraZonesToggle");
       const timezoneLayer = document.getElementById("timezoneLayer");
       const extraZoneLayer = document.getElementById("extraZoneLayer");
+      const tzMap = document.getElementById("tzMap");
       let aboutReturnFocus = null;
 
       const CLOCK_COLORS = [
@@ -1189,6 +1189,8 @@
       }
 
       function updateExtraZoneVisibility() {
+        const width = MAP.width + (extraZonesToggle.checked ? EXTRA_OFFSETS.length * SLOT_WIDTH : 0);
+        tzMap.setAttribute("viewBox", `0 0 ${width} ${MAP.height}`);
         if (extraZonesToggle.checked) {
           extraZoneLayer.removeAttribute("hidden");
         } else {
