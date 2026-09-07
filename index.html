@@ -1207,7 +1207,9 @@
         if (!hoveredTimezone) return;
         let time;
         try {
-          time = formatTime(new Date(), hoveredTimezone);
+          const now = new Date();
+          const abbreviation = displayAbbreviation(now, hoveredTimezone, isDstNow(now, hoveredTimezone));
+          time = `${formatTime(now, hoveredTimezone)} ${abbreviation}`;
         } catch (error) {
           time = "Time unavailable";
         }
