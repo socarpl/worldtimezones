@@ -2,7 +2,7 @@
 
 A standalone HTML/SVG world time-zone map with live clocks for UTC-12 through UTC+14.
 
-The page is built with plain HTML, CSS, and vanilla JavaScript. It does not use React or any frontend framework.
+The page is built with plain HTML, CSS, and vanilla JavaScript. It does not use React or any frontend framework
 
 Access the webpage: https://socarpl.github.io/worldtimezones/
 
