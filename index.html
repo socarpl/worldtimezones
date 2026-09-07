@@ -201,6 +201,8 @@
 
     .timezone-ocean-boundary {
       opacity: 0.88;
+      pointer-events: all;
+      fill-rule: evenodd;
     }
 
     .land {
@@ -312,6 +314,13 @@
 
     .tooltip.visible {
       opacity: 1;
+    }
+
+    .timezone-tooltip {
+      max-width: calc(100vw - 16px);
+      transform: none;
+      white-space: pre-line;
+      overflow-wrap: anywhere;
     }
 
     .about-overlay {
@@ -534,6 +543,7 @@
 
   <div class="tooltip" id="tooltip" role="tooltip">Daylight Saving Time</div>
 
+  <div class="tooltip timezone-tooltip" id="timezoneTooltip" role="tooltip"></div>
   <script src="map-data.js"></script>
   <script>
     (() => {
@@ -569,6 +579,9 @@
       const extraZoneLayer = document.getElementById("extraZoneLayer");
       const tzMap = document.getElementById("tzMap");
       let aboutReturnFocus = null;
+      const timezoneTooltip = document.getElementById("timezoneTooltip");
+      let hoveredTimezone = null;
+      let timezonePointer = null;
 
       const CLOCK_COLORS = [
         { background: "#000000", name: "Black", text: "#F5F5F5" },
@@ -1047,6 +1060,17 @@
             class: "zone-boundary timezone-ocean-boundary",
             "data-tzid": zone.tzid
           });
+          path.addEventListener("mouseenter", (event) => {
+            if (!timezoneLinesToggle.checked) return;
+            hoveredTimezone = zone.tzid;
+            timezonePointer = event;
+            updateTimezoneTooltip();
+          });
+          path.addEventListener("mousemove", (event) => {
+            timezonePointer = event;
+            positionTimezoneTooltip();
+          });
+          path.addEventListener("mouseleave", hideTimezoneTooltip);
           timezoneLayer.appendChild(path);
         });
 
@@ -1164,7 +1188,42 @@
         tooltip.classList.remove("visible");
       }
 
+      function positionTimezoneTooltip() {
+        if (!timezonePointer) return;
+        const bounds = timezoneTooltip.getBoundingClientRect();
+        let left = timezonePointer.clientX + 12;
+        let top = timezonePointer.clientY + 12;
+        if (left + bounds.width > window.innerWidth - 8) {
+          left = timezonePointer.clientX - bounds.width - 12;
+        }
+        if (top + bounds.height > window.innerHeight - 8) {
+          top = timezonePointer.clientY - bounds.height - 12;
+        }
+        timezoneTooltip.style.left = `${Math.max(8, left)}px`;
+        timezoneTooltip.style.top = `${Math.max(8, top)}px`;
+      }
+
+      function updateTimezoneTooltip() {
+        if (!hoveredTimezone) return;
+        let time;
+        try {
+          time = formatTime(new Date(), hoveredTimezone);
+        } catch (error) {
+          time = "Time unavailable";
+        }
+        timezoneTooltip.textContent = `${hoveredTimezone}\n${time}`;
+        positionTimezoneTooltip();
+        timezoneTooltip.classList.add("visible");
+      }
+
+      function hideTimezoneTooltip() {
+        hoveredTimezone = null;
+        timezonePointer = null;
+        timezoneTooltip.classList.remove("visible");
+      }
+
       function openAboutDialog() {
+        hideTimezoneTooltip();
         const activeElement = document.activeElement;
         aboutReturnFocus = activeElement && typeof activeElement.focus === "function" ? activeElement : aboutButton;
         aboutOverlay.hidden = false;
@@ -1185,6 +1244,7 @@
           timezoneLayer.removeAttribute("hidden");
         } else {
           timezoneLayer.setAttribute("hidden", "");
+          hideTimezoneTooltip();
         }
       }
 
@@ -1320,9 +1380,13 @@
           lastMinute = minuteKey;
         }
         lastTick = now.getTime();
+        updateTimezoneTooltip();
       }
 
       aboutButton.addEventListener("click", openAboutDialog);
+      document.getElementById("mapScroll").addEventListener("scroll", hideTimezoneTooltip);
+      window.addEventListener("resize", hideTimezoneTooltip);
+      window.addEventListener("blur", hideTimezoneTooltip);
       aboutClose.addEventListener("click", closeAboutDialog);
       aboutOk.addEventListener("click", closeAboutDialog);
       timezoneLinesToggle.addEventListener("input", updateTimezoneLineVisibility);
